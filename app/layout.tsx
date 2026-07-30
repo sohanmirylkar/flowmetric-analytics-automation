@@ -13,6 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://sohanmirylkar.github.io/flowmetric-analytics-automation/"),
   title: "Flowmetric | Analytics Workflow Automation",
   description: "Ingest, validate, clean, and transform structured business data into decision-ready metrics.",
   icons: {
@@ -22,13 +23,13 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Flowmetric | Analytics Workflow Automation",
     description: "Turn raw business records into validated, decision-ready metrics.",
-    images: [{ url: "/og.png", width: 1664, height: 954, alt: "Flowmetric analytics workflow automation dashboard" }],
+    images: [{ url: "og.png", width: 1664, height: 954, alt: "Flowmetric analytics workflow automation dashboard" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Flowmetric | Analytics Workflow Automation",
     description: "Turn raw business records into validated, decision-ready metrics.",
-    images: ["/og.png"],
+    images: ["og.png"],
   },
 };
 
