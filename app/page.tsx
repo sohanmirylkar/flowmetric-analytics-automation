@@ -1,56 +1,73 @@
 "use client";
 
-import { ChangeEvent, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
 
-type RecordRow = { date: string; region: string; category: string; revenue: number; cost: number; status: string };
+type RetailRow = {
+  transactionId: string; date: string; customerId: string; gender: string; age: number;
+  category: string; quantity: number; price: number; revenue: number; status: "Valid" | "Review";
+};
 
-const seed: RecordRow[] = [
-  { date: "2026-07-01", region: "North", category: "Software", revenue: 18420, cost: 9200, status: "Valid" },
-  { date: "2026-07-03", region: "West", category: "Services", revenue: 14880, cost: 8100, status: "Valid" },
-  { date: "2026-07-06", region: "South", category: "Hardware", revenue: 11240, cost: 7350, status: "Valid" },
-  { date: "2026-07-09", region: "East", category: "Software", revenue: 19650, cost: 10100, status: "Valid" },
-  { date: "2026-07-12", region: "West", category: "Hardware", revenue: 9350, cost: 6420, status: "Review" },
-  { date: "2026-07-15", region: "North", category: "Services", revenue: 16200, cost: 7900, status: "Valid" },
-  { date: "2026-07-18", region: "South", category: "Software", revenue: 21100, cost: 10400, status: "Valid" },
-  { date: "2026-07-21", region: "East", category: "Services", revenue: 13750, cost: 7100, status: "Valid" },
+const preview: RetailRow[] = [
+  { transactionId: "1", date: "2023-11-24", customerId: "CUST001", gender: "Male", age: 34, category: "Beauty", quantity: 3, price: 50, revenue: 150, status: "Valid" },
+  { transactionId: "2", date: "2023-02-27", customerId: "CUST002", gender: "Female", age: 26, category: "Clothing", quantity: 2, price: 500, revenue: 1000, status: "Valid" },
+  { transactionId: "3", date: "2023-01-13", customerId: "CUST003", gender: "Male", age: 50, category: "Electronics", quantity: 1, price: 30, revenue: 30, status: "Valid" },
 ];
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
-function parseCsv(text: string): RecordRow[] {
+function parseCsv(text: string): RetailRow[] {
   const [headerLine, ...lines] = text.trim().split(/\r?\n/);
   if (!headerLine) return [];
   const headers = headerLine.split(",").map((value) => value.trim().toLowerCase());
-  const required = ["date", "region", "category", "revenue", "cost"];
-  if (!required.every((column) => headers.includes(column))) throw new Error(`Missing columns. Required: ${required.join(", ")}`);
+  const required = ["transaction id", "date", "customer id", "gender", "age", "product category", "quantity", "price per unit", "total amount"];
+  if (!required.every((column) => headers.includes(column))) throw new Error(`Missing Kaggle retail columns. Required: ${required.join(", ")}`);
   return lines.filter(Boolean).map((line) => {
     const values = line.split(",").map((value) => value.trim());
     const get = (name: string) => values[headers.indexOf(name)] ?? "";
-    const revenue = Number(get("revenue"));
-    const cost = Number(get("cost"));
-    const valid = get("date") && get("region") && get("category") && Number.isFinite(revenue) && Number.isFinite(cost);
-    return { date: get("date"), region: get("region"), category: get("category"), revenue, cost, status: valid ? "Valid" : "Review" };
+    const age = Number(get("age")), quantity = Number(get("quantity")), price = Number(get("price per unit")), revenue = Number(get("total amount"));
+    const valid = Boolean(get("transaction id") && get("date") && get("customer id") && get("product category")
+      && Number.isFinite(age) && Number.isFinite(quantity) && Number.isFinite(price) && Number.isFinite(revenue)
+      && Math.abs(quantity * price - revenue) < 0.01);
+    return {
+      transactionId: get("transaction id"), date: get("date"), customerId: get("customer id"), gender: get("gender"),
+      age, category: get("product category"), quantity, price, revenue, status: valid ? "Valid" : "Review",
+    };
   });
 }
 
 export default function Home() {
-  const [rows, setRows] = useState(seed);
-  const [fileName, setFileName] = useState("sample_sales_data.csv");
-  const [notice, setNotice] = useState("Demo data loaded — upload a CSV to run your own workflow.");
-  const [region, setRegion] = useState("All regions");
-  const filtered = region === "All regions" ? rows : rows.filter((row) => row.region === region);
-  const totals = useMemo(() => {
+  const [rows, setRows] = useState(preview);
+  const [fileName, setFileName] = useState("retail_sales_dataset.csv");
+  const [notice, setNotice] = useState("Loading 1,000 Kaggle retail transactions…");
+  const [category, setCategory] = useState("All categories");
+
+  useEffect(() => {
+    fetch("./data/retail_sales_dataset.csv")
+      .then((response) => {
+        if (!response.ok) throw new Error("Dataset could not be loaded.");
+        return response.text();
+      })
+      .then((text) => {
+        const parsed = parseCsv(text);
+        setRows(parsed);
+        setNotice(`${parsed.length.toLocaleString()} Kaggle records loaded and validated.`);
+      })
+      .catch(() => setNotice("Preview data loaded. You can still upload the Kaggle CSV."));
+  }, []);
+
+  const filtered = category === "All categories" ? rows : rows.filter((row) => row.category === category);
+  const metrics = useMemo(() => {
     const revenue = filtered.reduce((sum, row) => sum + (Number.isFinite(row.revenue) ? row.revenue : 0), 0);
-    const cost = filtered.reduce((sum, row) => sum + (Number.isFinite(row.cost) ? row.cost : 0), 0);
-    return { revenue, profit: revenue - cost, margin: revenue ? ((revenue - cost) / revenue) * 100 : 0 };
+    const units = filtered.reduce((sum, row) => sum + (Number.isFinite(row.quantity) ? row.quantity : 0), 0);
+    return { revenue, units, averageOrder: filtered.length ? revenue / filtered.length : 0 };
   }, [filtered]);
-  const byRegion = useMemo(() => {
+  const byCategory = useMemo(() => {
     const result = new Map<string, number>();
-    filtered.forEach((row) => result.set(row.region || "Unknown", (result.get(row.region || "Unknown") ?? 0) + row.revenue));
+    filtered.forEach((row) => result.set(row.category || "Unknown", (result.get(row.category || "Unknown") ?? 0) + row.revenue));
     return [...result.entries()].sort((a, b) => b[1] - a[1]);
   }, [filtered]);
-  const maxRegion = Math.max(...byRegion.map(([, value]) => value), 1);
-  const regions = [...new Set(rows.map((row) => row.region).filter(Boolean))];
+  const maxCategory = Math.max(...byCategory.map(([, value]) => value), 1);
+  const categories = [...new Set(rows.map((row) => row.category).filter(Boolean))];
   const issues = rows.filter((row) => row.status === "Review").length;
 
   async function onUpload(event: ChangeEvent<HTMLInputElement>) {
@@ -59,17 +76,17 @@ export default function Home() {
     try {
       const parsed = parseCsv(await file.text());
       if (!parsed.length) throw new Error("The CSV contains no data rows.");
-      setRows(parsed); setFileName(file.name); setRegion("All regions"); setNotice(`${parsed.length} records processed successfully.`);
+      setRows(parsed); setFileName(file.name); setCategory("All categories"); setNotice(`${parsed.length.toLocaleString()} records processed successfully.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Unable to process this file.");
     }
   }
 
   function downloadCsv() {
-    const header = "date,region,category,revenue,cost,profit,status";
-    const data = rows.map((row) => [row.date, row.region, row.category, row.revenue, row.cost, row.revenue - row.cost, row.status].join(","));
+    const header = "transaction_id,date,customer_id,gender,age,product_category,quantity,price_per_unit,total_amount,status";
+    const data = rows.map((row) => [row.transactionId, row.date, row.customerId, row.gender, row.age, row.category, row.quantity, row.price, row.revenue, row.status].join(","));
     const url = URL.createObjectURL(new Blob([[header, ...data].join("\n")], { type: "text/csv" }));
-    const anchor = document.createElement("a"); anchor.href = url; anchor.download = "cleaned-business-output.csv"; anchor.click(); URL.revokeObjectURL(url);
+    const anchor = document.createElement("a"); anchor.href = url; anchor.download = "validated-kaggle-retail-output.csv"; anchor.click(); URL.revokeObjectURL(url);
   }
 
   return (
@@ -80,29 +97,34 @@ export default function Home() {
         <button className="ghost" onClick={downloadCsv}>Export report</button>
       </header>
       <section className="hero" id="overview">
-        <div><p className="eyebrow">AUTOMATED ANALYTICS WORKSPACE</p><h1>From raw records<br />to <em>clear decisions.</em></h1><p className="heroCopy">Ingest, validate, clean, and transform business data into stakeholder-ready metrics—without the repetitive spreadsheet work.</p></div>
+        <div>
+          <p className="eyebrow">KAGGLE RETAIL ANALYTICS WORKSPACE</p>
+          <h1>From raw records<br />to <em>clear decisions.</em></h1>
+          <p className="heroCopy">Explore 1,000 retail transactions through an automated workflow for validation, cleaning, KPI calculation, and stakeholder-ready reporting.</p>
+          <a className="sourceLink" href="https://www.kaggle.com/datasets/mohammadtalib786/retail-sales-dataset" target="_blank" rel="noreferrer">Source: Kaggle Retail Sales Dataset · CC0 Public Domain ↗</a>
+        </div>
         <div className="runCard" id="workflow">
-          <div className="runTop"><span><i className="statusDot" /> WORKFLOW READY</span><span>CSV · EXCEL EXPORT</span></div>
-          <div className="fileDrop"><span className="fileIcon">↗</span><div><strong>{fileName}</strong><small>{rows.length} records in current dataset</small></div><label className="uploadButton">Choose CSV<input type="file" accept=".csv,text/csv" onChange={onUpload} /></label></div>
+          <div className="runTop"><span><i className="statusDot" /> WORKFLOW READY</span><span>KAGGLE CSV · EXPORT</span></div>
+          <div className="fileDrop"><span className="fileIcon">↗</span><div><strong>{fileName}</strong><small>{rows.length.toLocaleString()} transactions in current dataset</small></div><label className="uploadButton">Choose CSV<input type="file" accept=".csv,text/csv" onChange={onUpload} /></label></div>
           <p className="notice">{notice}</p>
           <div className="pipeline" aria-label="Workflow progress"><span>01 INGEST</span><i /><span>02 VALIDATE</span><i /><span>03 TRANSFORM</span><i /><span>04 REPORT</span></div>
         </div>
       </section>
       <section className="dashboard">
-        <div className="sectionHead"><div><p className="eyebrow">PERFORMANCE SNAPSHOT</p><h2>Executive overview</h2></div><select value={region} onChange={(event) => setRegion(event.target.value)} aria-label="Filter by region"><option>All regions</option>{regions.map((name) => <option key={name}>{name}</option>)}</select></div>
+        <div className="sectionHead"><div><p className="eyebrow">2023 RETAIL PERFORMANCE</p><h2>Executive overview</h2></div><select value={category} onChange={(event) => setCategory(event.target.value)} aria-label="Filter by product category"><option>All categories</option>{categories.map((name) => <option key={name}>{name}</option>)}</select></div>
         <div className="kpis">
-          <article><span>REVENUE</span><strong>{money.format(totals.revenue)}</strong><small>Processed dataset</small></article>
-          <article><span>GROSS PROFIT</span><strong>{money.format(totals.profit)}</strong><small>Revenue less cost</small></article>
-          <article><span>PROFIT MARGIN</span><strong>{totals.margin.toFixed(1)}%</strong><small>Calculated automatically</small></article>
+          <article><span>SALES REVENUE</span><strong>{money.format(metrics.revenue)}</strong><small>Across filtered transactions</small></article>
+          <article><span>UNITS SOLD</span><strong>{metrics.units.toLocaleString()}</strong><small>Quantity purchased</small></article>
+          <article><span>AVERAGE ORDER</span><strong>{money.format(metrics.averageOrder)}</strong><small>Revenue per transaction</small></article>
           <article className={issues ? "warn" : ""}><span>QUALITY FLAGS</span><strong>{issues}</strong><small>{issues ? "Records need review" : "All checks passed"}</small></article>
         </div>
         <div className="analyticsGrid">
-          <article className="chartCard"><div className="cardTitle"><div><span>REVENUE DISTRIBUTION</span><h3>Performance by region</h3></div><span className="live">● LIVE</span></div><div className="bars">{byRegion.map(([name, value]) => <div className="barRow" key={name}><span>{name}</span><div><i style={{ width: `${(value / maxRegion) * 100}%` }} /></div><strong>{money.format(value)}</strong></div>)}</div></article>
-          <article className="qualityCard"><span>DATA HEALTH</span><div className="score">{Math.round(((rows.length - issues) / Math.max(rows.length, 1)) * 100)}<sup>%</sup></div><p>Records passing validation</p><ul><li><span>Required fields</span><b>Checked</b></li><li><span>Numeric formats</span><b>Checked</b></li><li><span>Business metrics</span><b>Calculated</b></li></ul></article>
+          <article className="chartCard"><div className="cardTitle"><div><span>SALES DISTRIBUTION</span><h3>Revenue by product category</h3></div><span className="live">● KAGGLE</span></div><div className="bars">{byCategory.map(([name, value]) => <div className="barRow" key={name}><span>{name}</span><div><i style={{ width: `${(value / maxCategory) * 100}%` }} /></div><strong>{money.format(value)}</strong></div>)}</div></article>
+          <article className="qualityCard"><span>DATA HEALTH</span><div className="score">{Math.round(((rows.length - issues) / Math.max(rows.length, 1)) * 100)}<sup>%</sup></div><p>Records passing validation</p><ul><li><span>Required fields</span><b>Checked</b></li><li><span>Numeric formats</span><b>Checked</b></li><li><span>Quantity × price</span><b>Reconciled</b></li></ul></article>
         </div>
-        <article className="tableCard" id="records"><div className="cardTitle"><div><span>CLEANED OUTPUT</span><h3>Validated business records</h3></div><button className="textButton" onClick={downloadCsv}>Download CSV ↓</button></div><div className="tableWrap"><table><thead><tr><th>Date</th><th>Region</th><th>Category</th><th>Revenue</th><th>Cost</th><th>Profit</th><th>Status</th></tr></thead><tbody>{filtered.slice(0, 8).map((row, index) => <tr key={`${row.date}-${index}`}><td>{row.date}</td><td>{row.region}</td><td>{row.category}</td><td>{money.format(row.revenue)}</td><td>{money.format(row.cost)}</td><td>{money.format(row.revenue - row.cost)}</td><td><span className={`tag ${row.status === "Review" ? "review" : ""}`}>{row.status}</span></td></tr>)}</tbody></table></div></article>
+        <article className="tableCard" id="records"><div className="cardTitle"><div><span>VALIDATED OUTPUT</span><h3>Kaggle retail transactions</h3></div><button className="textButton" onClick={downloadCsv}>Download CSV ↓</button></div><div className="tableWrap"><table><thead><tr><th>Transaction</th><th>Date</th><th>Customer</th><th>Category</th><th>Units</th><th>Unit price</th><th>Total</th><th>Status</th></tr></thead><tbody>{filtered.slice(0, 8).map((row) => <tr key={row.transactionId}><td>#{row.transactionId}</td><td>{row.date}</td><td>{row.customerId}</td><td>{row.category}</td><td>{row.quantity}</td><td>{money.format(row.price)}</td><td>{money.format(row.revenue)}</td><td><span className={`tag ${row.status === "Review" ? "review" : ""}`}>{row.status}</span></td></tr>)}</tbody></table></div></article>
       </section>
-      <footer><span>FLOWMETRIC / ANALYTICS AUTOMATION</span><span>Structured data → validated insight → better decisions</span></footer>
+      <footer><span>FLOWMETRIC / KAGGLE RETAIL ANALYTICS</span><span>Dataset by Mohammad Talib · CC0 Public Domain</span></footer>
     </main>
   );
 }

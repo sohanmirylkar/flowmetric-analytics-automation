@@ -1,16 +1,20 @@
 # Flowmetric Analytics Workflow Automation
 
-A browser-based analytics workflow that turns structured CSV data into cleaned records, calculated KPIs, quality checks, regional performance summaries, and stakeholder-ready exports.
+A browser-based analytics workflow that turns Kaggle retail transactions into validated records, calculated KPIs, quality checks, category performance summaries, and stakeholder-ready exports.
+
+## Dataset
+
+The bundled default data is [Retail Sales Dataset by Mohammad Talib](https://www.kaggle.com/datasets/mohammadtalib786/retail-sales-dataset) from Kaggle. It contains 1,000 fictional retail transactions from 2023 and is published under the CC0 Public Domain license.
 
 ## CSV format
 
 Upload a comma-separated file with these headers:
 
 ```text
-date,region,category,revenue,cost
+Transaction ID,Date,Customer ID,Gender,Age,Product Category,Quantity,Price per Unit,Total Amount
 ```
 
-The app validates required fields and numeric values, calculates profit and margin, flags records that need review, and lets users download the cleaned output.
+The app validates required fields and numeric values, reconciles `Quantity × Price per Unit` against `Total Amount`, flags records that need review, and lets users download the validated output.
 
 ## Local development
 
