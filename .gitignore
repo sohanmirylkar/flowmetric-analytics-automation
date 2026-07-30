@@ -21,6 +21,8 @@
 # misc
 .DS_Store
 *.pem
+*.tar.gz
+.sites-package-stage/
 
 # debug
 npm-debug.log*
